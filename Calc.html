@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Actualización de pagos — CER + IPC</title>
+<style>
+  :root{
+    --ink:#1E332C;
+    --ink-soft:#3C5049;
+    --paper:#E7E2D2;
+    --paper-card:#F2EEE1;
+    --line:#C9C0A4;
+    --stamp-red:#8B2E2E;
+    --stamp-gold:#A9842A;
+    --ok:#3E5E45;
+    --err:#8B2E2E;
+    --mono:'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    --serif:Georgia, 'Palatino Linotype', 'Iowan Old Style', serif;
+    --sans:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--ink);
+    font-family:var(--sans);
+    color:var(--ink);
+    padding:32px 16px 80px;
+  }
+  .sheet{
+    max-width:960px;
+    margin:0 auto;
+    background:var(--paper);
+    border:1px solid #00000022;
+    box-shadow:0 30px 60px -20px rgba(0,0,0,.55);
+    position:relative;
+  }
+  .sheet::before{
+    content:"";
+    position:absolute; top:0; left:0; right:0; height:6px;
+    background:repeating-linear-gradient(90deg, var(--stamp-gold) 0 22px, transparent 22px 44px);
+    opacity:.55;
+  }
+  header{ padding:38px 44px 22px; border-bottom:2px solid var(--ink); }
+  .eyebrow{ font-family:var(--mono); font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-soft); }
+  h1{ font-family:var(--serif); font-size:34px; margin:6px 0 8px; font-weight:700; letter-spacing:.2px; }
+  .sub{ font-size:14.5px; color:var(--ink-soft); max-width:640px; line-height:1.5; }
+  .body-pad{ padding:8px 44px 44px; }
+  section.step{ border-top:1px dashed var(--line); padding:30px 0; }
+  section.step:first-of-type{border-top:none;}
+  .step-head{ display:flex; align-items:baseline; gap:14px; margin-bottom:14px; }
+  .step-num{ font-family:var(--serif); font-size:26px; color:var(--stamp-gold); min-width:34px; }
+  .step-title{ font-family:var(--serif); font-size:19px; font-weight:700; }
+  .step-desc{ font-size:13.5px; color:var(--ink-soft); margin:0 0 14px 48px; line-height:1.5; max-width:640px; }
+  .step-body{ margin-left:48px; }
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  @media (max-width:640px){ .grid2{ grid-template-columns:1fr; } }
+  label{ display:block; font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-soft); margin-bottom:6px; }
+  textarea, input[type=text], input[type=date], input[type=number]{
+    width:100%; font-family:var(--mono); font-size:13px; padding:10px 12px;
+    background:var(--paper-card); border:1px solid var(--line); color:var(--ink); border-radius:2px;
+  }
+  textarea{ resize:vertical; min-height:110px; line-height:1.5; }
+  .row-inline{ display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-top:10px;}
+  button{
+    font-family:var(--sans); font-size:13px; font-weight:600; padding:10px 18px;
+    background:var(--ink); color:var(--paper); border:none; cursor:pointer; border-radius:2px; letter-spacing:.02em;
+  }
+  button.secondary{ background:transparent; border:1px solid var(--ink); color:var(--ink); }
+  button:hover{ opacity:.85; }
+  .filecount{ font-size:12px; color:var(--ink-soft); font-family:var(--mono); }
+  .field-note{ font-size:11px; color:var(--ink-soft); margin-top:4px; line-height:1.4; }
+  .check-row{ margin-top:16px; }
+  .check-row label{ display:flex; align-items:center; gap:8px; font-family:var(--sans); font-size:13px; text-transform:none; letter-spacing:0; cursor:pointer; }
+  .check-row input{ width:auto; }
+  .canones-table{ width:100%; border-collapse:collapse; font-family:var(--mono); font-size:12.5px; }
+  .canones-table th{ text-align:left; padding:0 8px 6px 0; }
+  .canones-table td{ padding:4px 8px 4px 0; border-bottom:1px solid var(--line); text-align:left; }
+  .canones-table input{ margin:0; }
+  .canones-table .canon-del{ padding:6px 12px; }
+  #desgloseWrap{ margin-top:26px; }
+  #desgloseWrap h3{ font-family:var(--serif); font-size:17px; margin:0 0 8px; }
+  #desgloseWrap .desglose-canon{ font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); margin:16px 0 4px; }
+  table{ width:100%; border-collapse:collapse; font-family:var(--mono); font-size:12.5px; }
+  th, td{ border-bottom:1px solid var(--line); padding:8px 10px; text-align:right; white-space:nowrap; }
+  th:first-child, td:first-child{ text-align:left; }
+  thead th{ font-family:var(--sans); font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); border-bottom:2px solid var(--ink); }
+  tbody tr:hover{ background:#00000008; }
+  .table-wrap{ overflow-x:auto; border:1px solid var(--line); background:var(--paper-card); }
+  .err-row{ color:var(--stamp-red); }
+  .totals{ display:flex; justify-content:flex-end; margin-top:18px; gap:36px; align-items:center; }
+  .totals .figure{ text-align:right; }
+  .totals .figure .k{ font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-soft); }
+  .totals .figure .v{ font-family:var(--serif); font-size:22px; font-weight:700; }
+  .stamp{
+    width:104px; height:104px; border:3px double var(--stamp-red); border-radius:50%; color:var(--stamp-red);
+    display:flex; align-items:center; justify-content:center; text-align:center;
+    font-family:var(--mono); font-size:10px; letter-spacing:.05em; text-transform:uppercase;
+    transform:rotate(-9deg); opacity:.85; flex:none; line-height:1.4; padding:6px;
+  }
+  .status-line{ font-size:12px; margin-top:10px; font-family:var(--mono); }
+  .status-ok{ color:var(--ok); }
+  .status-err{ color:var(--err); }
+  footer{ padding:20px 44px 34px; border-top:1px dashed var(--line); font-size:11.5px; color:var(--ink-soft); line-height:1.6; }
+
+  /* Encabezado y nota solo visibles al imprimir / guardar PDF */
+  .print-header{ display:none; }
+  .print-note{ display:none; }
+
+  @media print{
+    @page{ size: A4 landscape; margin: 12mm; }
+    body{ background:#fff; padding:0; }
+    .sheet{ max-width:none; margin:0; border:none; box-shadow:none; }
+    .sheet::before{ display:none; }
+    header, footer, section.step:not(#resultsSection){ display:none !important; }
+    #resultsSection{ display:block !important; border-top:none; padding:0; }
+    #resultsSection .step-head{ display:none; }
+    .print-header{ display:block; margin-bottom:14px; border-bottom:2px solid #1E332C; padding-bottom:10px; }
+    .print-header h1{ font-family:var(--serif); font-size:20px; margin:0 0 4px; }
+    .print-header .sub{ font-size:12px; color:#333; margin:0; }
+    .table-wrap{ border:none; background:#fff; }
+    #resultsTable{ font-size:11px; }
+    #resultsTable th, #resultsTable td{ padding:5px 7px; }
+    .totals{ margin-top:18px; }
+    .hide-print{ display:none !important; }
+    .print-note{ display:block; margin-top:14px; font-size:10.5px; color:#333; line-height:1.5; }
+  }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <header>
+    <div class="eyebrow">Estudio · Liquidaciones judiciales</div>
+    <h1>Actualización de pagos por CER + IPC</h1>
+    <div class="sub">Aplica el coeficiente CER a los pagos anteriores a diciembre de 2016, y a partir de esa fecha continúa la actualización con el IPC Nacional (INDEC), hasta la fecha de fin que definas. Podés incluir opcionalmente IVA (21%), interés anual simple (6%) y tasa pasiva digital BIP.</div>
+  </header>
+
+  <div class="body-pad">
+
+    <section class="step">
+      <div class="step-head"><div class="step-num">1</div><div class="step-title">Serie de CER (precargada)</div></div>
+      <div class="step-desc">Serie diaria del CER desde 2010 hasta el 31/12/2016, cargada automáticamente desde <b>BCRA</b>. Si en el futuro necesitás actualizarla, ejecutá <code>node build_indices.js</code> o pegalo a mano acá abajo.</div>
+      <div class="step-body">
+        <label>Serie CER (fecha,valor)</label>
+        <textarea id="cerInput" placeholder="2010-01-01,2.3691&#10;2016-12-31,6.8378"></textarea>
+        <div class="row-inline">
+          <button onclick="loadIndex('cer')">Cargar CER</button>
+          <input type="file" id="cerFile" accept=".csv,.txt" style="display:none" onchange="loadFile(this,'cerInput')">
+          <button class="secondary" onclick="document.getElementById('cerFile').click()">Importar archivo</button>
+          <span class="filecount" id="cerCount">0 valores cargados</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="step">
+      <div class="step-head"><div class="step-num">2</div><div class="step-title">Serie de IPC Nacional (precargada)</div></div>
+      <div class="step-desc">Serie mensual del IPC "Nivel general / Total Nacional" (INDEC, base dic-2016=100) desde dic-2016 hasta el último mes publicado, cargada automáticamente. Se actualiza con <code>node build_indices.js</code>.</div>
+      <div class="step-body">
+        <label>Serie IPC (fecha,valor)</label>
+        <textarea id="ipcInput" placeholder="2016-12,100.00&#10;2026-07,12076.39"></textarea>
+        <div class="row-inline">
+          <button onclick="loadIndex('ipc')">Cargar IPC</button>
+          <input type="file" id="ipcFile" accept=".csv,.txt" style="display:none" onchange="loadFile(this,'ipcInput')">
+          <button class="secondary" onclick="document.getElementById('ipcFile').click()">Importar archivo</button>
+          <span class="filecount" id="ipcCount">0 valores cargados</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="step">
+      <div class="step-head"><div class="step-num">3</div><div class="step-title">Serie tasa pasiva BIP (TNA 30 días)</div></div>
+      <div class="step-desc">Tasa pasiva digital del Banco Provincia (BIP) para depósitos a 30 días, expresada como <b>TNAV</b>. Una línea por dato: <b>fecha,TNAV</b> (ej. <code>2020-01-15,30</code> = 30% TNAV). Se aplica en el tramo cuantificación → pago, sin capitalizar.</div>
+      <div class="step-body">
+        <label>Serie BIP (fecha,TNAV)</label>
+        <textarea id="bipInput" placeholder="2008-08-19,12.5&#10;2020-01-15,30"></textarea>
+        <div class="row-inline">
+          <button onclick="loadBip()">Cargar BIP</button>
+          <input type="file" id="bipFile" accept=".csv,.txt,.xls,.xlsx" style="display:none" onchange="importarBip(this)">
+          <button class="secondary" onclick="document.getElementById('bipFile').click()">Importar archivo</button>
+          <span class="filecount" id="bipCount">0 valores cargados</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="step">
+      <div class="step-head"><div class="step-num">4</div><div class="step-title">Datos y cálculo</div></div>
+      <div class="step-desc">Cargá los cánones (período y monto) y marcá las condiciones a incluir: IVA 21%, interés anual simple 6% y tasa pasiva digital BIP. Cada canon se actualiza desde su fecha de inicio hasta su fecha de fin (o hasta hoy si no cargás fecha de fin).</div>
+      <div class="step-body">
+        <div class="grid2">
+          <div>
+            <label>Corte CER → IPC</label>
+            <input type="date" id="fechaCorte" value="2016-12-31">
+          </div>
+        </div>
+        <div class="check-row">
+          <label><input type="checkbox" id="aplicarIVA"> Incorporar IVA (21%) al capital base</label>
+        </div>
+        <div class="check-row">
+          <label><input type="checkbox" id="aplicar6" checked> Aplicar interés anual simple (6%)</label>
+        </div>
+        <div class="check-row">
+          <label><input type="checkbox" id="mensual"> Pago mensual (mes a mes)</label>
+        </div>
+        <div class="check-row">
+          <label><input type="checkbox" id="aplicarBip" onchange="toggleBip()"> Aplicar tasa pasiva digital BIP (Banco Provincia)</label>
+        </div>
+        <div id="bipWrap" style="display:none; margin-top:12px;">
+          <label>Fecha de cuantificación</label>
+          <input type="date" id="fechaCuantificacion">
+          <div class="field-note">Fecha en que se cuantificó el capital. Desde acá hasta el fin del período corre la tasa BIP.</div>
+        </div>
+
+        <div style="margin-top:26px;">
+          <label>Cánones</label>
+          <div class="table-wrap">
+            <table class="canones-table">
+              <thead>
+                <tr>
+                  <th>Fecha inicio</th>
+                  <th>Fecha fin (opcional)</th>
+                  <th>Monto</th>
+                  <th style="width:44px;"></th>
+                </tr>
+              </thead>
+              <tbody id="canonesBody"></tbody>
+            </table>
+          </div>
+          <div class="row-inline">
+            <button class="secondary" onclick="agregarCanon()">+ Agregar fila</button>
+            <input type="file" id="canonesFile" multiple style="display:none" onchange="importarCanones(this)">
+            <button class="secondary" onclick="document.getElementById('canonesFile').click()">Importar Excel/CSV</button>
+            <span class="filecount" id="canonesCount"></span>
+          </div>
+        </div>
+
+        <div class="row-inline" style="margin-top:18px;">
+          <button onclick="calcular()">Calcular actualización</button>
+          <button class="secondary" onclick="exportCSV()" id="exportBtn" style="display:none">Descargar resultados (CSV)</button>
+          <button class="secondary" onclick="descargarPDF()" id="pdfBtn" style="display:none">Descargar PDF</button>
+        </div>
+        <div id="statusLine" class="status-line"></div>
+      </div>
+    </section>
+
+    <section class="step" id="resultsSection" style="display:none">
+      <div class="step-head"><div class="step-num">5</div><div class="step-title">Resultado</div></div>
+      <div class="step-body">
+        <div class="print-header">
+          <h1 id="printTitle">Actualización de pagos</h1>
+          <div class="sub">Actualizado al <span id="printFecha"></span> · Corte CER → IPC: <span id="printCorte"></span><span id="printCuantifWrap"> · Cuantificación: <span id="printCuantif"></span></span></div>
+        </div>
+        <div class="table-wrap">
+          <table id="resultsTable">
+            <thead>
+              <tr>
+                <th>Período (inicio → fin)</th><th>Canon (sin IVA)</th><th>Capital base (con IVA)</th><th class="hide-print">Factor indexación</th>
+                <th>Capital actualizado</th><th class="hide-print">Meses 6%</th><th>Interés 6%</th><th>Interés BIP</th>
+                <th>Monto final</th>
+              </tr>
+            </thead>
+            <tbody id="resultsBody"></tbody>
+          </table>
+        </div>
+        <div class="totals">
+          <div class="figure">
+            <div class="k">Total original</div>
+            <div class="v" id="totalOriginal">$0</div>
+          </div>
+          <div class="figure">
+            <div class="k">Total actualizado</div>
+            <div class="v" id="totalFinal">$0</div>
+          </div>
+          <div class="stamp" id="stampBox">Actualizado<br><span id="stampDate"></span></div>
+        </div>
+        <div class="print-note">
+          Nota: el cálculo aplica, sobre el canon sin IVA, la incorporación opcional del IVA (21%), la actualización por CER/IPC, el interés anual simple del 6% (meses transcurridos) y, si corresponde, la tasa pasiva digital BIP. Los valores intermedios (factor de indexación y meses) se muestran solo en pantalla.
+        </div>
+        <div id="desgloseWrap" style="display:none;"></div>
+      </div>
+    </section>
+
+  </div>
+
+  <footer>
+    Series CER e IPC precargadas desde fuentes oficiales (BCRA / INDEC). Herramienta de cálculo — no reemplaza la verificación profesional de cada liquidación.<br>
+    <span class="filecount" id="dataVersion"></span>
+  </footer>
+</div>
+
+<script src="indices.js"></script>
+<script src="xlsx.full.min.js"></script>
+<script>
+let cerData = [];
+let ipcData = [];
+let bipData = [];
+
+// Fecha de fin por defecto = hoy (fecha local; evita el desfase de UTC en Argentina)
+const _hoy = new Date();
+const HOY = _hoy.getFullYear() + '-' + String(_hoy.getMonth() + 1).padStart(2, '0') + '-' + String(_hoy.getDate()).padStart(2, '0');
+
+// arranca la tabla de cánones con una fila vacía
+agregarCanon();
+
+// Carga automática de las series desde indices.js
+function aplicarIndices(data){
+  if(!data) return;
+  // adapta las claves del JSON ({fecha,valor}) al formato interno ({date,value})
+  cerData = (data.cer || []).map(d => ({ date: d.fecha, value: d.valor }));
+  ipcData = (data.ipc || []).map(d => ({ date: d.fecha, value: d.valor }));
+  bipData = (data.bip || []).map(d => ({ date: d.fecha, tasaTNAV: d.tasaTNAV }));
+  if(data.meta && data.meta.corte){
+    document.getElementById('fechaCorte').value = data.meta.corte;
+  }
+  document.getElementById('cerCount').textContent = cerData.length + ' valores cargados' +
+    (cerData.length ? ` (${cerData[0].date} a ${cerData[cerData.length - 1].date})` : '');
+  document.getElementById('ipcCount').textContent = ipcData.length + ' valores cargados' +
+    (ipcData.length ? ` (${ipcData[0].date} a ${ipcData[ipcData.length - 1].date})` : '');
+  document.getElementById('bipCount').textContent = bipData.length + ' valores cargados' +
+    (bipData.length ? ` (${bipData[0].date} a ${bipData[bipData.length - 1].date})` : '');
+  const ver = document.getElementById('dataVersion');
+  if(ver && data.meta){
+    ver.textContent = 'Datos actualizados al ' + (data.meta.actualizado || '?') +
+      ' · CER ' + (data.meta.cerDesde || '2010') + ' → corte ' + (data.meta.corte || '2016-12-31');
+  }
+}
+
+if(window.INDICES && window.INDICES.cer && window.INDICES.cer.length){
+  aplicarIndices(window.INDICES);
+}
+
+function normalizeDate(raw){
+  if(!raw) return null;
+  raw = raw.trim();
+  let m;
+  if(m = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/)) return raw;
+  if(m = raw.match(/^(\d{4})-(\d{2})$/)) return raw+'-01';
+  if(m = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  if(m = raw.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/)) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  return null;
+}
+
+function parseSeries(text){
+  const out = [];
+  text.split('\n').forEach(line=>{
+    line = line.trim();
+    if(!line) return;
+    const parts = line.split(/[,;\t]+/);
+    if(parts.length < 2) return;
+    const date = normalizeDate(parts[0]);
+    const value = parseFloat(parts[1].replace(',', '.'));
+    if(date && !isNaN(value)) out.push({date, value});
+  });
+  out.sort((a,b)=> a.date.localeCompare(b.date));
+  const dedup = {};
+  out.forEach(o=> dedup[o.date] = o.value);
+  return Object.keys(dedup).sort().map(d=>({date:d, value:dedup[d]}));
+}
+
+function lookupIndex(series, dateStr){
+  if(!series.length) return null;
+  let found = null;
+  for(let i=0;i<series.length;i++){
+    if(series[i].date <= dateStr) found = series[i];
+    else break;
+  }
+  return found;
+}
+
+function loadIndex(which){
+  if(which === 'cer'){
+    cerData = parseSeries(document.getElementById('cerInput').value);
+    document.getElementById('cerCount').textContent = cerData.length + ' valores cargados' + (cerData.length? ` (${cerData[0].date} a ${cerData[cerData.length-1].date})` : '');
+  } else {
+    ipcData = parseSeries(document.getElementById('ipcInput').value);
+    document.getElementById('ipcCount').textContent = ipcData.length + ' valores cargados' + (ipcData.length? ` (${ipcData[0].date} a ${ipcData[ipcData.length-1].date})` : '');
+  }
+}
+
+function loadFile(input, targetId){
+  const file = input.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById(targetId).value = e.target.result;
+    if(targetId === 'cerInput') loadIndex('cer');
+    if(targetId === 'ipcInput') loadIndex('ipc');
+  };
+  reader.readAsText(file);
+}
+
+// ---- tasa pasiva BIP (TNA 30 días, interés simple) ----
+function parseBip(text){
+  const out = [];
+  text.split('\n').forEach(line=>{
+    line = line.trim();
+    if(!line) return;
+    const m = line.match(/^([^,;\t]+)[,;\t]+(.+)$/);
+    if(!m) return;
+    const date = normalizeDate(m[1]);
+    const tasa = parseMonto(m[2]);
+    if(date && !isNaN(tasa)) out.push({ date, tasaTNAV: tasa });
+  });
+  out.sort((a,b)=> a.date.localeCompare(b.date));
+  const dedup = {};
+  out.forEach(o=> dedup[o.date] = o.tasaTNAV);
+  return Object.keys(dedup).sort().map(d=>({ date: d, tasaTNAV: dedup[d] }));
+}
+
+function loadBip(){
+  bipData = parseBip(document.getElementById('bipInput').value);
+  document.getElementById('bipCount').textContent = bipData.length + ' valores cargados' +
+    (bipData.length ? ` (${bipData[0].date} a ${bipData[bipData.length - 1].date})` : '');
+}
+
+function extraerBipFila(row){
+  if(!row || row.length < 2) return null;
+  const date = normalizarFechaCelda(row[0]);
+  const tasa = normalizarMontoCelda(row[1]);
+  if(!date || tasa === null || isNaN(tasa)) return null;
+  return { date, tasaTNAV: tasa };
+}
+
+function importarBip(input){
+  const files = Array.from(input.files || []);
+  if(!files.length) return;
+  const lineas = [];
+  let pendientes = files.length;
+  const terminar = () => {
+    pendientes--;
+    if(pendientes > 0) return;
+    bipData = lineas.slice().sort((a,b)=> a.date.localeCompare(b.date));
+    document.getElementById('bipInput').value = bipData.map(x => `${x.date},${x.tasaTNAV}`).join('\n');
+    input.value = '';
+    document.getElementById('bipCount').textContent = bipData.length + ' valores cargados' +
+      (bipData.length ? ` (${bipData[0].date} a ${bipData[bipData.length - 1].date})` : '');
+  };
+  files.forEach(file => {
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    if(ext === 'xls' || ext === 'xlsx'){
+      if(typeof XLSX === 'undefined'){ terminar(); return; }
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          const wb = XLSX.read(e.target.result, { type:'array', cellDates:true });
+          wb.SheetNames.forEach(name => {
+            const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header:1, raw:true, defval:null });
+            rows.forEach(row => { const b = extraerBipFila(row); if(b) lineas.push(b); });
+          });
+        } catch(err){ console.error(err); }
+        terminar();
+      };
+      reader.onerror = () => terminar();
+      reader.readAsArrayBuffer(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = e => {
+        String(e.target.result).split('\n').forEach(line => {
+          const m = line.trim().match(/^([^,;\t]+)[,;\t]+(.+)$/);
+          if(!m) return;
+          const date = normalizeDate(m[1]);
+          const tasa = parseMonto(m[2]);
+          if(date && !isNaN(tasa)) lineas.push({ date, tasaTNAV: tasa });
+        });
+        terminar();
+      };
+      reader.onerror = () => terminar();
+      reader.readAsText(file);
+    }
+  });
+}
+
+// ---- núcleo de cálculo (dos tramos) ----
+function addDays(dateStr, days){
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+}
+function diffDays(a, b){
+  return Math.round((new Date(b + 'T00:00:00') - new Date(a + 'T00:00:00')) / 86400000);
+}
+
+function factorIndexacion(desde, hasta, corte){
+  if(desde < corte && hasta <= corte){
+    const a = lookupIndex(cerData, desde), b = lookupIndex(cerData, hasta);
+    if(!a || !b) return null;
+    return b.value / a.value;
+  }
+  if(desde < corte && hasta > corte){
+    const a = lookupIndex(cerData, desde), c = lookupIndex(cerData, corte);
+    const ib = lookupIndex(ipcData, corte), it = lookupIndex(ipcData, hasta);
+    if(!a || !c || !ib || !it) return null;
+    return (c.value / a.value) * (it.value / ib.value);
+  }
+  const a = lookupIndex(ipcData, desde), b = lookupIndex(ipcData, hasta);
+  if(!a || !b) return null;
+  return b.value / a.value;
+}
+
+function mesesTranscurridos(desde, hasta){
+  if(!desde || !hasta || hasta <= desde) return 0;
+  const y0 = parseInt(desde.slice(0,4)), m0 = parseInt(desde.slice(5,7));
+  const y1 = parseInt(hasta.slice(0,4)), m1 = parseInt(hasta.slice(5,7));
+  return Math.max(0, (y1 - y0) * 12 + (m1 - m0));
+}
+
+function listarMeses(desde, hasta){
+  const out = [];
+  let y = parseInt(desde.slice(0,4)), m = parseInt(desde.slice(5,7));
+  const y1 = parseInt(hasta.slice(0,4)), m1 = parseInt(hasta.slice(5,7));
+  while (y < y1 || (y === y1 && m <= m1)){
+    out.push(`${y}-${String(m).padStart(2,'0')}-01`);
+    m++;
+    if(m > 12){ m = 1; y++; }
+  }
+  return out;
+}
+
+function calcularInteresBIP(capital, desde, hasta){
+  let interes = 0;
+  let cursor = desde;
+  while(cursor < hasta){
+    const inicio = cursor;
+    const finBloque = addDays(cursor, 30);
+    const fin = finBloque < hasta ? finBloque : hasta;
+    const t = lookupIndex(bipData, inicio);
+    if(!t) return { error: true, interes: 0 };
+    const dias = diffDays(inicio, fin);
+    interes += capital * (t.tasaTNAV / 100) / 365 * dias;
+    cursor = fin;
+  }
+  return { error: false, interes };
+}
+
+// ---- parsing robusto de montos y fechas ----
+function parseMonto(s){
+  s = String(s).trim();
+  if(!s) return NaN;
+  const clean = s.replace(/[^0-9.,\-]/g, '');
+  if(!clean) return NaN;
+  const coma = clean.lastIndexOf(',');
+  const punto = clean.lastIndexOf('.');
+  if(coma >= 0 && punto >= 0){
+    // el separador más a la derecha es el decimal
+    if(coma > punto) return parseFloat(clean.replace(/\./g, '').replace(',', '.'));
+    return parseFloat(clean.replace(/,/g, ''));
+  }
+  if(coma >= 0) return parseFloat(clean.replace(',', '.'));
+  return parseFloat(clean);
+}
+
+function pad2(n){ return String(n).padStart(2, '0'); }
+
+function normalizarFechaCelda(cell){
+  if(cell === null || cell === undefined) return null;
+  if(cell instanceof Date && !isNaN(cell.getTime())){
+    return cell.getFullYear() + '-' + pad2(cell.getMonth() + 1) + '-' + pad2(cell.getDate());
+  }
+  if(typeof cell === 'number'){
+    // número de serie de Excel (días desde 1899-12-30)
+    if(cell > 20000 && cell < 60000){
+      const d = new Date(Date.UTC(1899, 11, 30) + Math.round(cell) * 86400000);
+      return d.getUTCFullYear() + '-' + pad2(d.getUTCMonth() + 1) + '-' + pad2(d.getUTCDate());
+    }
+    return null;
+  }
+  return normalizeDate(String(cell));
+}
+
+function normalizarMontoCelda(cell){
+  if(cell === null || cell === undefined) return null;
+  if(typeof cell === 'number') return cell;
+  return parseMonto(String(cell));
+}
+
+function extraerCanonFila(row){
+  if(!row || row.length < 2) return null;
+  const date = normalizarFechaCelda(row[0]);
+  const monto = normalizarMontoCelda(row[row.length - 1]);
+  if(!date || monto === null || isNaN(monto)) return null;
+  let fin = null;
+  if(row.length >= 3) fin = normalizarFechaCelda(row[1]);
+  return { date, fin, monto };
+}
+
+function agregarCanon(inicio, fin, monto){
+  const tbody = document.getElementById('canonesBody');
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input type="date" class="canon-inicio" value="${inicio || ''}"></td>
+    <td><input type="date" class="canon-fin" value="${fin || ''}"></td>
+    <td><input type="text" class="canon-monto" inputmode="decimal" placeholder="0,00" value="${(monto !== undefined && monto !== null) ? monto : ''}"></td>
+    <td><button type="button" class="secondary canon-del" title="Quitar fila">🗑</button></td>`;
+  tbody.appendChild(tr);
+  tr.querySelector('.canon-del').onclick = () => { tr.remove(); actualizarConteo(); };
+  actualizarConteo();
+}
+
+function actualizarConteo(){
+  const n = document.querySelectorAll('#canonesBody tr').length;
+  document.getElementById('canonesCount').textContent = n + ' canon(es) cargados';
+}
+
+// ---- importación de archivos (Excel / CSV / TXT) ----
+function importarCanones(input){
+  const files = Array.from(input.files || []);
+  if(!files.length) return;
+  const statusEl = document.getElementById('statusLine');
+  statusEl.className = 'status-line';
+  statusEl.textContent = 'Leyendo archivo(s)...';
+
+  const lineas = [];
+  let pendientes = files.length;
+
+  const terminar = () => {
+    pendientes--;
+    if(pendientes > 0) return;
+    input.value = '';
+    if(lineas.length){
+      document.getElementById('canonesBody').innerHTML = '';
+      lineas.forEach(c => agregarCanon(c.date, c.fin, c.monto));
+      statusEl.textContent = `Se importaron ${lineas.length} cánones.`;
+    } else {
+      statusEl.className = 'status-line status-err';
+      statusEl.textContent = 'No se encontraron filas válidas (fecha inicio, [fecha fin], monto) en el archivo.';
+    }
+  };
+
+  files.forEach(file => {
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    if(ext === 'xls' || ext === 'xlsx'){
+      if(typeof XLSX === 'undefined'){
+        statusEl.className = 'status-line status-err';
+        statusEl.textContent = 'No se pudo cargar el lector de Excel (xlsx.full.min.js).';
+        terminar();
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true });
+          wb.SheetNames.forEach(name => {
+            const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: null });
+            rows.forEach(row => {
+              const c = extraerCanonFila(row);
+              if(c) lineas.push(c);
+            });
+          });
+        } catch(err){
+          console.error(err);
+          statusEl.className = 'status-line status-err';
+          statusEl.textContent = 'Error al leer el archivo Excel: ' + (err.message || err);
+        }
+        terminar();
+      };
+      reader.onerror = () => terminar();
+      reader.readAsArrayBuffer(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = e => {
+        String(e.target.result).split('\n').forEach(line => {
+          const parts = line.trim().split(/[,;\t]+/);
+          if(parts.length < 2) return;
+          const date = normalizeDate(parts[0]);
+          const monto = parseMonto(parts[parts.length - 1]);
+          if(!date || isNaN(monto)) return;
+          let fin = null;
+          if(parts.length >= 3) fin = normalizeDate(parts[1]);
+          lineas.push({ date, fin, monto });
+        });
+        terminar();
+      };
+      reader.onerror = () => terminar();
+      reader.readAsText(file);
+    }
+  });
+}
+
+const money = n => new Intl.NumberFormat('es-AR', {style:'currency', currency:'ARS', maximumFractionDigits:2}).format(n);
+const num = (n, d=6) => Number(n).toLocaleString('es-AR', {minimumFractionDigits:d, maximumFractionDigits:d});
+
+let lastResults = [];
+let lastDesglose = [];
+
+function toggleBip(){
+  const on = document.getElementById('aplicarBip').checked;
+  document.getElementById('bipWrap').style.display = on ? 'block' : 'none';
+}
+
+function calcular(){
+  const fechaCorte = document.getElementById('fechaCorte').value;
+  const aplicarIVA = document.getElementById('aplicarIVA').checked;
+  const aplicar6 = document.getElementById('aplicar6').checked;
+  const aplicarBip = document.getElementById('aplicarBip').checked;
+  const mensual = document.getElementById('mensual').checked;
+  const fechaCuantif = document.getElementById('fechaCuantificacion').value;
+  const statusEl = document.getElementById('statusLine');
+
+  if(!cerData.length || !ipcData.length){
+    statusEl.className = 'status-line status-err';
+    statusEl.textContent = 'No hay series de CER/IPC cargadas. Verificá que exista indices.js junto al HTML (o regenerá con: node build_indices.js).';
+    return;
+  }
+
+  if(aplicarBip && !fechaCuantif){
+    statusEl.className = 'status-line status-err';
+    statusEl.textContent = 'Ingresá la "Fecha de cuantificación" (fecha en que se cuantificó el capital).';
+    return;
+  }
+
+  // lee las filas de la tabla de cánones
+  const canones = [];
+  document.querySelectorAll('#canonesBody tr').forEach(tr => {
+    const inicio = tr.querySelector('.canon-inicio').value;
+    const fin = tr.querySelector('.canon-fin').value;
+    const monto = parseMonto(tr.querySelector('.canon-monto').value);
+    if(inicio && !isNaN(monto)) canones.push({ date: inicio, fin: fin || null, monto });
+  });
+
+  if(!canones.length){
+    statusEl.className = 'status-line status-err';
+    statusEl.textContent = 'Cargá al menos un canon con fecha de inicio y monto.';
+    return;
+  }
+
+  const results = [];
+  const desglose = [];
+  let errores = 0;
+
+  const calcularPago = (date, fin, monto) => {
+    if(fin < date){
+      return { date, fin, monto, error: 'La fecha de fin es anterior a la fecha de inicio' };
+    }
+    const capitalBase = aplicarIVA ? monto * 1.21 : monto;
+    if(fin === date){
+      return { date, fin, monto, capitalBase, factorIdx: 1, capitalIndexado: capitalBase, meses6: 0, interes6: 0, interesBip: 0, montoFinal: capitalBase };
+    }
+    const factorIdx = factorIndexacion(date, fin, fechaCorte);
+    if(factorIdx === null){
+      return { date, fin, monto, error: 'Falta dato de CER/IPC para esa fecha o para la fecha de corte' };
+    }
+    const capitalIndexado = capitalBase * factorIdx;
+    const hasta6 = (aplicarBip && fechaCuantif && fechaCuantif < fin) ? fechaCuantif : fin;
+    const meses6 = aplicar6 ? mesesTranscurridos(date, hasta6) : 0;
+    const interes6 = aplicar6 ? capitalIndexado * 0.06 * (meses6 / 12) : 0;
+    const capitalAlHasta6 = capitalIndexado + interes6;
+    let interesBip = 0;
+    if(aplicarBip && fechaCuantif && fechaCuantif < fin){
+      const r = calcularInteresBIP(capitalAlHasta6, fechaCuantif, fin);
+      if(r.error){
+        return { date, fin, monto, error: 'Falta dato de tasa BIP para esa fecha o para la fecha final' };
+      }
+      interesBip = r.interes;
+    }
+    const montoFinal = capitalAlHasta6 + interesBip;
+    return { date, fin, monto, capitalBase, factorIdx, capitalIndexado, meses6, interes6, interesBip, montoFinal };
+  };
+
+  canones.forEach(c=>{
+    const fin = c.fin || HOY;
+
+    if(mensual){
+      // modo "mes a mes": un pago por mes, cada uno actualizado desde su mes hasta "fin"
+      listarMeses(c.date, fin).forEach(mes => {
+        const r = calcularPago(mes, fin, c.monto);
+        if(r.error) errores++;
+        results.push(r);
+      });
+    } else {
+      // modo "un solo monto": se actualiza de inicio a fin
+      const r = calcularPago(c.date, fin, c.monto);
+      if(r.error) errores++;
+      results.push(r);
+
+      // desglose mes a mes del incremento (solo indexación CER/IPC)
+      const base = aplicarIVA ? c.monto * 1.21 : c.monto;
+      const meses = listarMeses(c.date, fin).map(mes => {
+        const f = factorIndexacion(c.date, mes, fechaCorte);
+        return { fecha: mes, factor: f, valor: (f === null) ? null : base * f };
+      });
+      desglose.push({ canon: c.date + ' → ' + fin, base, meses });
+    }
+  });
+
+  lastResults = results;
+  lastDesglose = desglose;
+  renderResults(results, aplicarBip ? fechaCuantif : '', desglose);
+
+  statusEl.className = errores ? 'status-line status-err' : 'status-line status-ok';
+  statusEl.textContent = errores
+    ? `${errores} de ${results.length} filas no se pudieron actualizar (revisá CER/IPC/BIP y las fechas).`
+    : `${results.length} filas actualizadas correctamente.`;
+}
+
+function renderResults(results, fechaCuantif, desglose){
+  const tbody = document.getElementById('resultsBody');
+  tbody.innerHTML = '';
+  let totalOriginal = 0, totalFinal = 0;
+
+  const aplicarIVA = document.getElementById('aplicarIVA').checked;
+  const aplicar6 = document.getElementById('aplicar6').checked;
+  const aplicarBip = document.getElementById('aplicarBip').checked;
+  const mensual = document.getElementById('mensual').checked;
+
+  results.forEach(r=>{
+    const tr = document.createElement('tr');
+    if(r.error){
+      tr.className = 'err-row';
+      tr.innerHTML = `<td>${r.date} → ${r.fin || HOY}</td><td>${money(r.monto)}</td><td colspan="7">${r.error}</td>`;
+    } else {
+      totalOriginal += r.monto;
+      totalFinal += r.montoFinal;
+      tr.innerHTML = `
+        <td>${r.date} → ${r.fin}</td>
+        <td>${money(r.monto)}</td>
+        <td>${money(r.capitalBase)}</td>
+        <td class="hide-print">${num(r.factorIdx,5)}</td>
+        <td>${money(r.capitalIndexado)}</td>
+        <td class="hide-print">${r.meses6}</td>
+        <td>${money(r.interes6)}</td>
+        <td>${money(r.interesBip)}</td>
+        <td><b>${money(r.montoFinal)}</b></td>`;
+    }
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById('totalOriginal').textContent = money(totalOriginal);
+  document.getElementById('totalFinal').textContent = money(totalFinal);
+  document.getElementById('stampDate').textContent = HOY;
+  document.getElementById('resultsSection').style.display = 'block';
+  const hayResultados = results.some(r=>!r.error);
+  document.getElementById('exportBtn').style.display = hayResultados ? 'inline-block' : 'none';
+  document.getElementById('pdfBtn').style.display = hayResultados ? 'inline-block' : 'none';
+  document.getElementById('printFecha').textContent = HOY;
+  document.getElementById('printCorte').textContent = document.getElementById('fechaCorte').value;
+  document.getElementById('printCuantif').textContent = fechaCuantif || '';
+  document.getElementById('printCuantifWrap').style.display = fechaCuantif ? 'inline' : 'none';
+
+  // Título dinámico según condiciones activas
+  const partes = ['CER + IPC'];
+  if(aplicarIVA) partes.push('IVA 21%');
+  if(aplicar6) partes.push('6% simple');
+  if(aplicarBip) partes.push('tasa BIP');
+  if(mensual) partes.push('mensual');
+  document.getElementById('printTitle').textContent = 'Actualización de pagos — ' + partes.join(' + ');
+
+  // Desglose mensual (solo en modo "ver incremento", es decir, sin pago mensual)
+  const dWrap = document.getElementById('desgloseWrap');
+  if(desglose && desglose.length){
+    let html = '<h3>Desglose mensual del incremento</h3>';
+    desglose.forEach(d => {
+      html += `<div class="desglose-canon">Período: ${d.canon} — Capital base: ${money(d.base)}</div>`;
+      html += '<div class="table-wrap"><table class="canones-table"><thead><tr><th>Mes</th><th>Factor</th><th>Valor</th></tr></thead><tbody>';
+      d.meses.forEach(m => {
+        html += `<tr><td>${m.fecha}</td><td>${m.factor === null ? '—' : num(m.factor,6)}</td><td>${m.valor === null ? '—' : money(m.valor)}</td></tr>`;
+      });
+      html += '</tbody></table></div>';
+    });
+    dWrap.innerHTML = html;
+    dWrap.style.display = 'block';
+  } else {
+    dWrap.innerHTML = '';
+    dWrap.style.display = 'none';
+  }
+}
+
+function descargarPDF(){
+  window.print();
+}
+
+function exportCSV(){
+  const header = ['fecha_inicio','fecha_fin','canon_sin_iva','capital_base_con_iva','factor_indexacion','capital_actualizado','meses_6','interes_6','interes_bip','monto_final'];
+  const lines = [header.join(',')];
+  lastResults.forEach(r=>{
+    if(r.error){
+      lines.push([r.date, r.fin || '', r.monto, '', '', '', '', '', '', 'ERROR: '+r.error].join(','));
+    } else {
+      lines.push([r.date, r.fin, r.monto, r.capitalBase, r.factorIdx, r.capitalIndexado, r.meses6, r.interes6, r.interesBip, r.montoFinal].join(','));
+    }
+  });
+  if(lastDesglose && lastDesglose.length){
+    lines.push('');
+    lines.push('DESGLOSE MENSUAL');
+    lines.push('periodo,mes,factor,valor');
+    lastDesglose.forEach(d => {
+      d.meses.forEach(m => {
+        lines.push([d.canon, m.fecha, m.factor === null ? '' : m.factor, m.valor === null ? '' : m.valor].join(','));
+      });
+    });
+  }
+  const blob = new Blob([lines.join('\n')], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'liquidacion_actualizada.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>

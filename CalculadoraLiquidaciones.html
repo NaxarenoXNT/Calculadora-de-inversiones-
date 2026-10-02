@@ -128,10 +128,13 @@
     .totals{ margin-top:18px; }
     .hide-print{ display:none !important; }
     .print-note{ display:block; margin-top:14px; font-size:10.5px; color:#333; line-height:1.5; }
+    #printSummaryWrap{ display:none; }
     body.print-summary-only #resultsTableWrap,
     body.print-summary-only #desgloseWrap,
     body.print-summary-only .print-note{ display:none !important; }
+    body.print-summary-only #printSummaryWrap{ display:block !important; }
     body.print-summary-only .print-summary-note{ display:block; margin-top:14px; font-size:10.5px; color:#333; line-height:1.5; }
+    body.print-summary-only .total-original-figure{ display:none !important; }
     body.print-summary-only .totals{ justify-content:center; margin-top:28px; }
     body.print-summary-only .totals .figure .v{ font-size:28px; }
   }
@@ -280,8 +283,16 @@
             <tbody id="resultsBody"></tbody>
           </table>
         </div>
+        <div class="table-wrap" id="printSummaryWrap">
+          <table class="canones-table">
+            <thead>
+              <tr><th>Período ingresado</th><th>Monto ingresado</th><th>Monto final</th></tr>
+            </thead>
+            <tbody id="printSummaryBody"></tbody>
+          </table>
+        </div>
         <div class="totals">
-          <div class="figure">
+          <div class="figure total-original-figure">
             <div class="k">Total original</div>
             <div class="v" id="totalOriginal">$0</div>
           </div>
@@ -295,7 +306,7 @@
           Nota: el cálculo aplica, sobre el canon sin IVA, la incorporación opcional del IVA (21%), la actualización por CER/IPC, el interés anual simple del 6% (meses transcurridos) y, si corresponde, la tasa pasiva digital BIP. Los valores intermedios (factor de indexación y meses) se muestran solo en pantalla.
         </div>
         <div class="print-summary-note">
-          Resumen final. El detalle de montos, períodos e incrementos mensuales fue omitido a pedido para generar un documento compacto.
+          Resumen final. Se muestra una sola fila por cada dato ingresado, con su monto final actualizado. El detalle mes a mes fue omitido.
         </div>
         <div id="desgloseWrap" style="display:none;"></div>
       </div>
@@ -853,19 +864,27 @@ function calcular(){
     return { date, fin, monto, fechaCuantificacion: cuantificacion, capitalBase, factorIdx, capitalIndexado, meses6, interes6, interesBip, montoFinal };
   };
 
-  canones.forEach(c=>{
+  canones.forEach((c, canonIndex)=>{
     const fin = c.fin || HOY;
 
     if(mensual){
       // modo "mes a mes": un pago por mes, cada uno actualizado desde su mes hasta "fin"
       listarMeses(c.date, fin).forEach(mes => {
         const r = calcularPago(mes, fin, c.monto, c.fechaCuantificacion);
+        r.sourceIndex = canonIndex;
+        r.sourceDate = c.date;
+        r.sourceFin = fin;
+        r.sourceMonto = c.monto;
         if(r.error) errores++;
         results.push(r);
       });
     } else {
       // modo "un solo monto": se actualiza de inicio a fin
       const r = calcularPago(c.date, fin, c.monto, c.fechaCuantificacion);
+      r.sourceIndex = canonIndex;
+      r.sourceDate = c.date;
+      r.sourceFin = fin;
+      r.sourceMonto = c.monto;
       if(r.error) errores++;
       results.push(r);
 
@@ -923,6 +942,32 @@ function renderResults(results, fechaCuantif, desglose){
         <td><b>${money(r.montoFinal)}</b></td>`;
     }
     tbody.appendChild(tr);
+  });
+
+  const resumenPorDato = new Map();
+  results.forEach((r, fallbackIndex) => {
+    if(r.error) return;
+    const key = r.sourceIndex !== undefined ? r.sourceIndex : fallbackIndex;
+    if(!resumenPorDato.has(key)){
+      resumenPorDato.set(key, {
+        date: r.sourceDate || r.date,
+        fin: r.sourceFin || r.fin,
+        monto: r.sourceMonto !== undefined ? r.sourceMonto : r.monto,
+        montoFinal: 0
+      });
+    }
+    resumenPorDato.get(key).montoFinal += r.montoFinal;
+  });
+
+  const summaryBody = document.getElementById('printSummaryBody');
+  summaryBody.innerHTML = '';
+  resumenPorDato.forEach(item => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${item.date} → ${item.fin}</td>
+      <td>${money(item.monto)}</td>
+      <td><b>${money(item.montoFinal)}</b></td>`;
+    summaryBody.appendChild(tr);
   });
 
   document.getElementById('totalOriginal').textContent = money(totalOriginal);

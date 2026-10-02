@@ -106,6 +106,10 @@
   /* Encabezado y nota solo visibles al imprimir / guardar PDF */
   .print-header{ display:none; }
   .print-note{ display:none; }
+  .print-summary-note{ display:none; }
+  .print-option{ display:inline-flex; align-items:center; gap:8px; }
+  .print-option select{ width:auto; min-width:245px; }
+  .canon-cuantif-col{ display:none; }
 
   @media print{
     @page{ size: A4 landscape; margin: 12mm; }
@@ -124,6 +128,12 @@
     .totals{ margin-top:18px; }
     .hide-print{ display:none !important; }
     .print-note{ display:block; margin-top:14px; font-size:10.5px; color:#333; line-height:1.5; }
+    body.print-summary-only #resultsTableWrap,
+    body.print-summary-only #desgloseWrap,
+    body.print-summary-only .print-note{ display:none !important; }
+    body.print-summary-only .print-summary-note{ display:block; margin-top:14px; font-size:10.5px; color:#333; line-height:1.5; }
+    body.print-summary-only .totals{ justify-content:center; margin-top:28px; }
+    body.print-summary-only .totals .figure .v{ font-size:28px; }
   }
 </style>
 </head>
@@ -207,7 +217,7 @@
         <div id="bipWrap" style="display:none; margin-top:12px;">
           <label>Fecha de cuantificación</label>
           <input type="date" id="fechaCuantificacion">
-          <div class="field-note">Fecha en que se cuantificó el capital. Desde acá hasta el fin del período corre la tasa BIP.</div>
+          <div class="field-note">Fecha general de respaldo. Si el Excel o una fila tiene su propia fecha de cuantificación, se usa esa fecha para ese monto.</div>
         </div>
 
         <div style="margin-top:26px;">
@@ -218,6 +228,7 @@
                 <tr>
                   <th>Fecha inicio</th>
                   <th>Fecha fin (opcional)</th>
+                  <th class="canon-cuantif-col">Fecha cuantificación (opcional)</th>
                   <th>Monto</th>
                   <th style="width:44px;"></th>
                 </tr>
@@ -227,16 +238,24 @@
           </div>
           <div class="row-inline">
             <button class="secondary" onclick="agregarCanon()">+ Agregar fila</button>
-            <input type="file" id="canonesFile" multiple style="display:none" onchange="importarCanones(this)">
+            <input type="file" id="canonesFile" multiple accept=".csv,.txt,.xls,.xlsx" style="display:none" onchange="importarCanones(this)">
             <button class="secondary" onclick="document.getElementById('canonesFile').click()">Importar Excel/CSV</button>
             <span class="filecount" id="canonesCount"></span>
           </div>
+          <div class="field-note">Formato habitual: Fecha inicio (o Fecha) y Monto. La Fecha fin sigue siendo opcional.</div>
+          <div class="field-note" id="bipImportHint" style="display:none">Con tasa BIP también se admite Fecha inicio + Monto + Fecha cuantificación. Si hay encabezados, las columnas pueden estar en distinto orden.</div>
         </div>
 
         <div class="row-inline" style="margin-top:18px;">
           <button onclick="calcular()">Calcular actualización</button>
           <button class="secondary" onclick="exportCSV()" id="exportBtn" style="display:none">Descargar resultados (CSV)</button>
-          <button class="secondary" onclick="descargarPDF()" id="pdfBtn" style="display:none">Descargar PDF</button>
+            <span id="pdfOptions" class="print-option" style="display:none">
+              <select id="pdfMode" aria-label="Contenido del PDF">
+                <option value="detalle">PDF con detalle completo</option>
+                <option value="resumen">PDF con resumen final (1 hoja)</option>
+              </select>
+              <button class="secondary" onclick="descargarPDF()" id="pdfBtn">Descargar PDF</button>
+            </span>
         </div>
         <div id="statusLine" class="status-line"></div>
       </div>
@@ -249,12 +268,12 @@
           <h1 id="printTitle">Actualización de pagos</h1>
           <div class="sub">Actualizado al <span id="printFecha"></span> · Corte CER → IPC: <span id="printCorte"></span><span id="printCuantifWrap"> · Cuantificación: <span id="printCuantif"></span></span></div>
         </div>
-        <div class="table-wrap">
+        <div class="table-wrap" id="resultsTableWrap">
           <table id="resultsTable">
             <thead>
               <tr>
                 <th>Período (inicio → fin)</th><th>Canon (sin IVA)</th><th>Capital base (con IVA)</th><th class="hide-print">Factor indexación</th>
-                <th>Capital actualizado</th><th class="hide-print">Meses 6%</th><th>Interés 6%</th><th>Interés BIP</th>
+                <th>Capital actualizado</th><th class="hide-print">Meses 6%</th><th>Interés 6%</th><th id="resultCuantifHeader" style="display:none">Fecha cuantificación</th><th>Interés BIP</th>
                 <th>Monto final</th>
               </tr>
             </thead>
@@ -274,6 +293,9 @@
         </div>
         <div class="print-note">
           Nota: el cálculo aplica, sobre el canon sin IVA, la incorporación opcional del IVA (21%), la actualización por CER/IPC, el interés anual simple del 6% (meses transcurridos) y, si corresponde, la tasa pasiva digital BIP. Los valores intermedios (factor de indexación y meses) se muestran solo en pantalla.
+        </div>
+        <div class="print-summary-note">
+          Resumen final. El detalle de montos, períodos e incrementos mensuales fue omitido a pedido para generar un documento compacto.
         </div>
         <div id="desgloseWrap" style="display:none;"></div>
       </div>
@@ -572,22 +594,61 @@ function normalizarMontoCelda(cell){
   return parseMonto(String(cell));
 }
 
-function extraerCanonFila(row){
-  if(!row || row.length < 2) return null;
-  const date = normalizarFechaCelda(row[0]);
-  const monto = normalizarMontoCelda(row[row.length - 1]);
-  if(!date || monto === null || isNaN(monto)) return null;
-  let fin = null;
-  if(row.length >= 3) fin = normalizarFechaCelda(row[1]);
-  return { date, fin, monto };
+function normalizarEncabezadoCanon(cell){
+  return String(cell === null || cell === undefined ? '' : cell)
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
-function agregarCanon(inicio, fin, monto){
+function detectarColumnasCanon(row){
+  const columnas = { inicio:-1, fin:-1, monto:-1, cuantificacion:-1 };
+  (row || []).forEach((cell, i) => {
+    const h = normalizarEncabezadoCanon(cell);
+    if(!h) return;
+    if(h.includes('cuant')) columnas.cuantificacion = i;
+    else if(h.includes('monto') || h.includes('importe') || h.includes('canon') || h.includes('capital')) columnas.monto = i;
+    else if(h === 'fecha' || h === 'periodo' || ((h.includes('fecha') || h.includes('periodo')) && (h.includes('inicio') || h.includes('desde')))) columnas.inicio = i;
+    else if((h.includes('fecha') || h.includes('periodo')) && (h.includes('fin') || h.includes('hasta') || h.includes('pago'))) columnas.fin = i;
+  });
+  return columnas.inicio >= 0 && columnas.monto >= 0 ? columnas : null;
+}
+
+function extraerCanonFila(row, columnas, leerCuantificacion){
+  if(!row || row.length < 2) return null;
+  let inicioCol = columnas ? columnas.inicio : 0;
+  let montoCol = columnas ? columnas.monto : row.length - 1;
+  let finCol = columnas ? columnas.fin : (row.length >= 3 ? 1 : -1);
+  let cuantifCol = columnas && leerCuantificacion ? columnas.cuantificacion : -1;
+
+  if(!columnas && leerCuantificacion && row.length >= 4){
+    montoCol = 2;
+    cuantifCol = 3;
+  } else if(!columnas && leerCuantificacion && row.length === 3){
+    // Formato BIP compacto sin encabezados: fecha inicio, monto, fecha cuantificación.
+    const segundoEsMonto = normalizarMontoCelda(row[1]);
+    const terceroEsFecha = normalizarFechaCelda(row[2]);
+    if(segundoEsMonto !== null && !isNaN(segundoEsMonto) && terceroEsFecha){
+      finCol = -1;
+      montoCol = 1;
+      cuantifCol = 2;
+    }
+  }
+  const date = normalizarFechaCelda(row[inicioCol]);
+  const monto = normalizarMontoCelda(row[montoCol]);
+  if(!date || monto === null || isNaN(monto)) return null;
+  const fin = finCol >= 0 ? normalizarFechaCelda(row[finCol]) : null;
+  const fechaCuantificacion = cuantifCol >= 0 ? normalizarFechaCelda(row[cuantifCol]) : null;
+  return { date, fin, monto, fechaCuantificacion };
+}
+
+function agregarCanon(inicio, fin, monto, fechaCuantificacion){
   const tbody = document.getElementById('canonesBody');
   const tr = document.createElement('tr');
+  const mostrarCuantificacion = document.getElementById('aplicarBip').checked;
   tr.innerHTML = `
     <td><input type="date" class="canon-inicio" value="${inicio || ''}"></td>
     <td><input type="date" class="canon-fin" value="${fin || ''}"></td>
+    <td class="canon-cuantif-col" style="${mostrarCuantificacion ? 'display:table-cell' : ''}"><input type="date" class="canon-cuantif" value="${fechaCuantificacion || ''}"></td>
     <td><input type="text" class="canon-monto" inputmode="decimal" placeholder="0,00" value="${(monto !== undefined && monto !== null) ? monto : ''}"></td>
     <td><button type="button" class="secondary canon-del" title="Quitar fila">🗑</button></td>`;
   tbody.appendChild(tr);
@@ -609,6 +670,7 @@ function importarCanones(input){
   statusEl.textContent = 'Leyendo archivo(s)...';
 
   const lineas = [];
+  const leerCuantificacion = document.getElementById('aplicarBip').checked;
   let pendientes = files.length;
 
   const terminar = () => {
@@ -617,8 +679,10 @@ function importarCanones(input){
     input.value = '';
     if(lineas.length){
       document.getElementById('canonesBody').innerHTML = '';
-      lineas.forEach(c => agregarCanon(c.date, c.fin, c.monto));
-      statusEl.textContent = `Se importaron ${lineas.length} cánones.`;
+      lineas.forEach(c => agregarCanon(c.date, c.fin, c.monto, c.fechaCuantificacion));
+      const conCuantificacion = lineas.filter(c => c.fechaCuantificacion).length;
+      statusEl.textContent = `Se importaron ${lineas.length} cánones` +
+        (conCuantificacion ? ` (${conCuantificacion} con fecha de cuantificación).` : '.');
     } else {
       statusEl.className = 'status-line status-err';
       statusEl.textContent = 'No se encontraron filas válidas (fecha inicio, [fecha fin], monto) en el archivo.';
@@ -640,8 +704,11 @@ function importarCanones(input){
           const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true });
           wb.SheetNames.forEach(name => {
             const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: null });
+            let columnas = null;
             rows.forEach(row => {
-              const c = extraerCanonFila(row);
+              const encabezados = detectarColumnasCanon(row);
+              if(encabezados){ columnas = encabezados; return; }
+              const c = extraerCanonFila(row, columnas, leerCuantificacion);
               if(c) lineas.push(c);
             });
           });
@@ -657,15 +724,14 @@ function importarCanones(input){
     } else {
       const reader = new FileReader();
       reader.onload = e => {
-        String(e.target.result).split('\n').forEach(line => {
-          const parts = line.trim().split(/[,;\t]+/);
-          if(parts.length < 2) return;
-          const date = normalizeDate(parts[0]);
-          const monto = parseMonto(parts[parts.length - 1]);
-          if(!date || isNaN(monto)) return;
-          let fin = null;
-          if(parts.length >= 3) fin = normalizeDate(parts[1]);
-          lineas.push({ date, fin, monto });
+        let columnas = null;
+        String(e.target.result).split(/\r?\n/).forEach(line => {
+          const separador = line.includes(';') ? ';' : (line.includes('\t') ? '\t' : ',');
+          const parts = line.trim().split(separador).map(x => x.trim());
+          const encabezados = detectarColumnasCanon(parts);
+          if(encabezados){ columnas = encabezados; return; }
+          const c = extraerCanonFila(parts, columnas, leerCuantificacion);
+          if(c) lineas.push(c);
         });
         terminar();
       };
@@ -684,6 +750,10 @@ let lastDesglose = [];
 function toggleBip(){
   const on = document.getElementById('aplicarBip').checked;
   document.getElementById('bipWrap').style.display = on ? 'block' : 'none';
+  document.getElementById('bipImportHint').style.display = on ? 'block' : 'none';
+  document.querySelectorAll('.canon-cuantif-col').forEach(el => {
+    el.style.display = on ? 'table-cell' : 'none';
+  });
 }
 
 function calcular(){
@@ -692,6 +762,7 @@ function calcular(){
   const aplicar6 = document.getElementById('aplicar6').checked;
   const aplicarBip = document.getElementById('aplicarBip').checked;
   const mensual = document.getElementById('mensual').checked;
+  document.getElementById('resultCuantifHeader').style.display = aplicarBip ? 'table-cell' : 'none';
   const fechaCuantif = document.getElementById('fechaCuantificacion').value;
   const statusEl = document.getElementById('statusLine');
 
@@ -701,19 +772,14 @@ function calcular(){
     return;
   }
 
-  if(aplicarBip && !fechaCuantif){
-    statusEl.className = 'status-line status-err';
-    statusEl.textContent = 'Ingresá la "Fecha de cuantificación" (fecha en que se cuantificó el capital).';
-    return;
-  }
-
   // lee las filas de la tabla de cánones
   const canones = [];
   document.querySelectorAll('#canonesBody tr').forEach(tr => {
     const inicio = tr.querySelector('.canon-inicio').value;
     const fin = tr.querySelector('.canon-fin').value;
+    const fechaCuantificacion = tr.querySelector('.canon-cuantif').value;
     const monto = parseMonto(tr.querySelector('.canon-monto').value);
-    if(inicio && !isNaN(monto)) canones.push({ date: inicio, fin: fin || null, monto });
+    if(inicio && !isNaN(monto)) canones.push({ date: inicio, fin: fin || null, monto, fechaCuantificacion: fechaCuantificacion || null });
   });
 
   if(!canones.length){
@@ -722,37 +788,47 @@ function calcular(){
     return;
   }
 
+  if(aplicarBip){
+    const sinCuantificacion = canones.filter(c => !c.fechaCuantificacion && !fechaCuantif).length;
+    if(sinCuantificacion){
+      statusEl.className = 'status-line status-err';
+      statusEl.textContent = `${sinCuantificacion} fila(s) no tienen fecha de cuantificación. Completala en cada fila o ingresá una fecha general.`;
+      return;
+    }
+  }
+
   const results = [];
   const desglose = [];
   let errores = 0;
 
-  const calcularPago = (date, fin, monto) => {
+  const calcularPago = (date, fin, monto, fechaCuantificacion) => {
+    const cuantificacion = fechaCuantificacion || fechaCuantif || null;
     if(fin < date){
-      return { date, fin, monto, error: 'La fecha de fin es anterior a la fecha de inicio' };
+      return { date, fin, monto, fechaCuantificacion: cuantificacion, error: 'La fecha de fin es anterior a la fecha de inicio' };
     }
     const capitalBase = aplicarIVA ? monto * 1.21 : monto;
     if(fin === date){
-      return { date, fin, monto, capitalBase, factorIdx: 1, capitalIndexado: capitalBase, meses6: 0, interes6: 0, interesBip: 0, montoFinal: capitalBase };
+      return { date, fin, monto, fechaCuantificacion: cuantificacion, capitalBase, factorIdx: 1, capitalIndexado: capitalBase, meses6: 0, interes6: 0, interesBip: 0, montoFinal: capitalBase };
     }
     const factorIdx = factorIndexacion(date, fin, fechaCorte);
     if(factorIdx === null){
-      return { date, fin, monto, error: 'Falta dato de CER/IPC para esa fecha o para la fecha de corte' };
+      return { date, fin, monto, fechaCuantificacion: cuantificacion, error: 'Falta dato de CER/IPC para esa fecha o para la fecha de corte' };
     }
     const capitalIndexado = capitalBase * factorIdx;
-    const hasta6 = (aplicarBip && fechaCuantif && fechaCuantif < fin) ? fechaCuantif : fin;
+    const hasta6 = (aplicarBip && cuantificacion && cuantificacion < fin) ? cuantificacion : fin;
     const meses6 = aplicar6 ? mesesTranscurridos(date, hasta6) : 0;
     const interes6 = aplicar6 ? capitalIndexado * 0.06 * (meses6 / 12) : 0;
     const capitalAlHasta6 = capitalIndexado + interes6;
     let interesBip = 0;
-    if(aplicarBip && fechaCuantif && fechaCuantif < fin){
-      const r = calcularInteresBIP(capitalAlHasta6, fechaCuantif, fin);
+    if(aplicarBip && cuantificacion && cuantificacion < fin){
+      const r = calcularInteresBIP(capitalAlHasta6, cuantificacion, fin);
       if(r.error){
-        return { date, fin, monto, error: 'Falta dato de tasa BIP para esa fecha o para la fecha final' };
+        return { date, fin, monto, fechaCuantificacion: cuantificacion, error: 'Falta dato de tasa BIP para esa fecha o para la fecha final' };
       }
       interesBip = r.interes;
     }
     const montoFinal = capitalAlHasta6 + interesBip;
-    return { date, fin, monto, capitalBase, factorIdx, capitalIndexado, meses6, interes6, interesBip, montoFinal };
+    return { date, fin, monto, fechaCuantificacion: cuantificacion, capitalBase, factorIdx, capitalIndexado, meses6, interes6, interesBip, montoFinal };
   };
 
   canones.forEach(c=>{
@@ -761,13 +837,13 @@ function calcular(){
     if(mensual){
       // modo "mes a mes": un pago por mes, cada uno actualizado desde su mes hasta "fin"
       listarMeses(c.date, fin).forEach(mes => {
-        const r = calcularPago(mes, fin, c.monto);
+        const r = calcularPago(mes, fin, c.monto, c.fechaCuantificacion);
         if(r.error) errores++;
         results.push(r);
       });
     } else {
       // modo "un solo monto": se actualiza de inicio a fin
-      const r = calcularPago(c.date, fin, c.monto);
+      const r = calcularPago(c.date, fin, c.monto, c.fechaCuantificacion);
       if(r.error) errores++;
       results.push(r);
 
@@ -783,7 +859,10 @@ function calcular(){
 
   lastResults = results;
   lastDesglose = desglose;
-  renderResults(results, aplicarBip ? fechaCuantif : '', desglose);
+  const fechasCuantificacion = [...new Set(results.map(r => r.fechaCuantificacion).filter(Boolean))];
+  const cuantificacionResumen = fechasCuantificacion.length === 1 ? fechasCuantificacion[0] :
+    (fechasCuantificacion.length > 1 ? 'según cada monto' : '');
+  renderResults(results, aplicarBip ? cuantificacionResumen : '', desglose);
 
   statusEl.className = errores ? 'status-line status-err' : 'status-line status-ok';
   statusEl.textContent = errores
@@ -805,7 +884,7 @@ function renderResults(results, fechaCuantif, desglose){
     const tr = document.createElement('tr');
     if(r.error){
       tr.className = 'err-row';
-      tr.innerHTML = `<td>${r.date} → ${r.fin || HOY}</td><td>${money(r.monto)}</td><td colspan="7">${r.error}</td>`;
+      tr.innerHTML = `<td>${r.date} → ${r.fin || HOY}</td><td>${money(r.monto)}</td><td colspan="${aplicarBip ? 8 : 7}">${r.error}</td>`;
     } else {
       totalOriginal += r.monto;
       totalFinal += r.montoFinal;
@@ -817,6 +896,7 @@ function renderResults(results, fechaCuantif, desglose){
         <td>${money(r.capitalIndexado)}</td>
         <td class="hide-print">${r.meses6}</td>
         <td>${money(r.interes6)}</td>
+        <td class="result-cuantif" style="${aplicarBip ? '' : 'display:none'}">${r.fechaCuantificacion || '—'}</td>
         <td>${money(r.interesBip)}</td>
         <td><b>${money(r.montoFinal)}</b></td>`;
     }
@@ -829,7 +909,7 @@ function renderResults(results, fechaCuantif, desglose){
   document.getElementById('resultsSection').style.display = 'block';
   const hayResultados = results.some(r=>!r.error);
   document.getElementById('exportBtn').style.display = hayResultados ? 'inline-block' : 'none';
-  document.getElementById('pdfBtn').style.display = hayResultados ? 'inline-block' : 'none';
+  document.getElementById('pdfOptions').style.display = hayResultados ? 'inline-flex' : 'none';
   document.getElementById('printFecha').textContent = HOY;
   document.getElementById('printCorte').textContent = document.getElementById('fechaCorte').value;
   document.getElementById('printCuantif').textContent = fechaCuantif || '';
@@ -864,17 +944,22 @@ function renderResults(results, fechaCuantif, desglose){
 }
 
 function descargarPDF(){
+  const resumen = document.getElementById('pdfMode').value === 'resumen';
+  document.body.classList.toggle('print-summary-only', resumen);
+  const limpiarModoImpresion = () => document.body.classList.remove('print-summary-only');
+  window.addEventListener('afterprint', limpiarModoImpresion, { once:true });
   window.print();
+  setTimeout(limpiarModoImpresion, 1000);
 }
 
 function exportCSV(){
-  const header = ['fecha_inicio','fecha_fin','canon_sin_iva','capital_base_con_iva','factor_indexacion','capital_actualizado','meses_6','interes_6','interes_bip','monto_final'];
+  const header = ['fecha_inicio','fecha_fin','fecha_cuantificacion','canon_sin_iva','capital_base_con_iva','factor_indexacion','capital_actualizado','meses_6','interes_6','interes_bip','monto_final'];
   const lines = [header.join(',')];
   lastResults.forEach(r=>{
     if(r.error){
-      lines.push([r.date, r.fin || '', r.monto, '', '', '', '', '', '', 'ERROR: '+r.error].join(','));
+      lines.push([r.date, r.fin || '', r.fechaCuantificacion || '', r.monto, '', '', '', '', '', '', 'ERROR: '+r.error].join(','));
     } else {
-      lines.push([r.date, r.fin, r.monto, r.capitalBase, r.factorIdx, r.capitalIndexado, r.meses6, r.interes6, r.interesBip, r.montoFinal].join(','));
+      lines.push([r.date, r.fin, r.fechaCuantificacion || '', r.monto, r.capitalBase, r.factorIdx, r.capitalIndexado, r.meses6, r.interes6, r.interesBip, r.montoFinal].join(','));
     }
   });
   if(lastDesglose && lastDesglose.length){
